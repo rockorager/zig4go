@@ -46,9 +46,10 @@ files: `assert_fast.go` which is used for ReleaseFast builds and `assert.go`
 which is used for all other builds. zig4go sets the build mode as a build tag,
 which the go compiler uses to conditionally compile one of these files. The
 `_fast` version is a no-op function, while the standard version contains
-assertion logic. The go compiler optimizes the no-op function away, so (just
-like in zig), you can pepper your codebase with assertions and compile them away
-with no performance cost in a ReleaseFast build.
+assertion logic. The go compiler [optimizes](https://godbolt.org/z/cfMs46ahb)
+the no-op function away, so (just like in zig), you can pepper your codebase
+with assertions and compile them away with no performance cost in a ReleaseFast
+build.
 
 ## Contributing
 
