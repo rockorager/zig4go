@@ -3,14 +3,12 @@
 package assert
 
 import (
-	"fmt"
 	"log"
 )
 
-func True(condition bool, format string, v ...any) {
+func True(condition bool) {
 	if !condition {
-		msg := fmt.Sprintf(format, v...)
-		log.Output(2, msg)
-		panic(msg)
+		log.Output(2, "assertion failure: value is not true")
+		panic("assertion failure: value is not true")
 	}
 }

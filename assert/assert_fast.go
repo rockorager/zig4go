@@ -2,4 +2,4 @@
 
 package assert
 
-func True(condition bool, format string, v ...any) {}
+func True(condition bool) {}
