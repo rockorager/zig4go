@@ -3,6 +3,8 @@
 We all know that zig is a great build system. zig4go makes it easy to build go
 projects using zig.
 
+[![Static Badge](https://img.shields.io/badge/v0.13(stable)-orange?logo=Zig&logoColor=Orange&label=Zig&labelColor=Orange)](https://ziglang.org/download/)
+
 ## Usage
 
 zig4go will do a few magic things for you:
