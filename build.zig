@@ -65,15 +65,16 @@ pub const BuildStep = struct {
             // Set zig as the CGO compiler
             const target = self.opts.target;
             const cc = b.fmt(
-                "zig cc -target {s}-{s}",
-                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag) },
+                "zig cc -target {s}-{s}-{s}",
+                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
             );
             try env.put("CC", cc);
             const cxx = b.fmt(
-                "zig c++ -target {s}-{s}",
-                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag) },
+                "zig c++ -target {s}-{s}-{s}",
+                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
             );
             try env.put("CXX", cxx);
+            try env.put("GOOS", @tagName(target.result.os.tag));
 
             // Tell the linker we are statically linking
             go_args.appendSlice(&.{ "--ldflags", "-linkmode=external -extldflags=-static" }) catch @panic("OOM");
