@@ -4,6 +4,10 @@ pub fn addExecutable(b: *std.Build, options: BuildStep.Options) *BuildStep {
     return BuildStep.create(b, options);
 }
 
+pub fn build(b: *std.Build) void {
+    _ = b;
+}
+
 /// Runs `go build` with relevant flags
 pub const BuildStep = struct {
     step: std.Build.Step,
