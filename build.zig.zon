@@ -1,6 +1,7 @@
 .{
-    .name = "go",
+    .name = .go,
     .version = "0.0.0",
     .dependencies = .{},
     .paths = .{""},
+	.fingerprint = 0xb668935686b9cf3d,
 }
