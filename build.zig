@@ -1,7 +1,7 @@
 const std = @import("std");
 
-pub fn addExecutable(b: *std.Build, options: BuildStep.Options) *BuildStep {
-    return BuildStep.create(b, options);
+pub fn addExecutable(b: *std.Build, options: GoBuildStep.Options) *GoBuildStep {
+    return GoBuildStep.create(b, options);
 }
 
 pub fn build(b: *std.Build) void {
@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
 }
 
 /// Runs `go build` with relevant flags
-pub const BuildStep = struct {
+pub const GoBuildStep = struct {
     step: std.Build.Step,
     generated_bin: ?*std.Build.GeneratedFile,
     opts: Options,
@@ -23,8 +23,8 @@ pub const BuildStep = struct {
     };
 
     /// Create a GoBuildStep
-    pub fn create(b: *std.Build, options: Options) *BuildStep {
-        const self = b.allocator.create(BuildStep) catch unreachable;
+    pub fn create(b: *std.Build, options: Options) *GoBuildStep {
+        const self = b.allocator.create(GoBuildStep) catch unreachable;
         self.* = .{
             .opts = options,
             .generated_bin = null,
@@ -32,14 +32,14 @@ pub const BuildStep = struct {
                 .id = .custom,
                 .name = "go build",
                 .owner = b,
-                .makeFn = BuildStep.make,
+                .makeFn = GoBuildStep.make,
             }),
         };
         return self;
     }
 
-    pub fn make(step: *std.Build.Step, progress: std.Progress.Node) !void {
-        const self: *BuildStep = @fieldParentPtr("step", step);
+    pub fn make(step: *std.Build.Step, mkoptions: std.Build.Step.MakeOptions) !void {
+        const self: *GoBuildStep = @fieldParentPtr("step", step);
         const b = step.owner;
         var go_args = std.ArrayList([]const u8).init(b.allocator);
         defer go_args.deinit();
@@ -59,11 +59,18 @@ pub const BuildStep = struct {
 
         var env = try std.process.getEnvMap(b.allocator);
 
+	// GO cross compilation.
+	// TODO(rjk): Rewrite this in terms of enums.
+            const target = self.opts.target;
+		const goarch = try isa_to_goarch(@tagName(target.result.cpu.arch));
+            try env.put("GOARCH", goarch);
+		const goos = try ostag_to_goos(@tagName(target.result.os.tag));
+            try env.put("GOOS", goos);
+
         // CGO
-        if (self.opts.cgo_enabled) {
+       if (self.opts.cgo_enabled) {
             try env.put("CGO_ENABLED", "1");
             // Set zig as the CGO compiler
-            const target = self.opts.target;
             const cc = b.fmt(
                 "zig cc -target {s}-{s}-{s}",
                 .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
@@ -74,19 +81,22 @@ pub const BuildStep = struct {
                 .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
             );
             try env.put("CXX", cxx);
-            try env.put("GOOS", @tagName(target.result.os.tag));
 
-            // Tell the linker we are statically linking
+
+            // Tell the linker that we are statically linking.
+		// TODO(rjk): Maybe not right?
             go_args.appendSlice(&.{ "--ldflags", "-linkmode=external -extldflags=-static" }) catch @panic("OOM");
         } else {
             try env.put("CGO_ENABLED", "0");
         }
 
+
+
         // Output file always needs to be added last
         try go_args.append(self.opts.package_path.getPath(b));
 
         const cmd = std.mem.join(b.allocator, " ", go_args.items) catch @panic("OOM");
-        const node = progress.start(cmd, 1);
+        const node = mkoptions.progress_node.start(cmd, 1);
         defer node.end();
 
         // run the command
@@ -101,7 +111,7 @@ pub const BuildStep = struct {
     }
 
     /// Return the LazyPath of the generated binary
-    pub fn getEmittedBin(self: *BuildStep) std.Build.LazyPath {
+    pub fn getEmittedBin(self: *GoBuildStep) std.Build.LazyPath {
         if (self.generated_bin) |generated_bin|
             return .{ .generated = .{ .file = generated_bin } };
 
@@ -113,7 +123,7 @@ pub const BuildStep = struct {
     }
 
     /// Add a run step which depends on the GoBuildStep
-    pub fn addRunStep(self: *BuildStep) *std.Build.Step.Run {
+    pub fn addRunStep(self: *GoBuildStep) *std.Build.Step.Run {
         const b = self.step.owner;
         const run_step = std.Build.Step.Run.create(b, b.fmt("run {s}", .{self.opts.name}));
         run_step.step.dependOn(&self.step);
@@ -124,7 +134,7 @@ pub const BuildStep = struct {
     }
 
     // Add an install step which depends on the GoBuildStep
-    pub fn addInstallStep(self: *BuildStep) void {
+    pub fn addInstallStep(self: *GoBuildStep) void {
         const b = self.step.owner;
         const bin_file = self.getEmittedBin();
         const install_step = b.addInstallBinFile(bin_file, self.opts.name);
@@ -132,7 +142,7 @@ pub const BuildStep = struct {
         b.getInstallStep().dependOn(&install_step.step);
     }
 
-    fn evalChildProcess(self: *BuildStep, argv: []const []const u8, env: *const std.process.EnvMap) !void {
+    fn evalChildProcess(self: *GoBuildStep, argv: []const []const u8, env: *const std.process.EnvMap) !void {
         const s = &self.step;
         const arena = s.owner.allocator;
 
@@ -152,3 +162,39 @@ pub const BuildStep = struct {
         try std.Build.Step.handleChildProcessTerm(s, result.term, null, argv);
     }
 };
+
+const GoEnvError = error{
+    UNSUPPORTED_GOARCH,
+    UNSUPPORTED_GOOS,
+};
+
+
+fn isa_to_goarch(isa: [:0]const u8) ![:0]const u8 {
+    if (std.mem.eql(u8, isa, "x86_64")) {
+        return "amd64";
+    } else if (std.mem.eql(u8, isa, "arm")) {
+       return "arm";
+    } else if (std.mem.eql(u8, isa, "aarch64")) {
+        return "arm64";
+    }
+// TODO(rjk): Consider adding some less popular processors that might
+// work.
+
+return error.UNSUPPORTED_GOARCH;
+}
+
+
+
+fn ostag_to_goos(os: [:0]const u8) ![:0]const u8 {
+
+    if (std.mem.startsWith(u8, os, "macos") ) {
+        return "darwin";
+    } else if (std.mem.startsWith(u8, os, "linux") ) {
+        return "linux";
+    } else if (std.mem.startsWith(u8, os, "windows") ) {
+        return "windows";
+    } 
+// TODO(rjk): Add less common OS. In particular, support Plan9.
+    return error.UNSUPPORTED_GOOS;
+}
+
