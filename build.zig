@@ -20,6 +20,7 @@ pub const GoBuildStep = struct {
         optimize: std.builtin.OptimizeMode,
         package_path: std.Build.LazyPath,
         cgo_enabled: bool = true,
+        // TODO(rjk): Add Mac target sysroot support.
     };
 
     /// Create a GoBuildStep
@@ -59,38 +60,37 @@ pub const GoBuildStep = struct {
 
         var env = try std.process.getEnvMap(b.allocator);
 
-	// GO cross compilation.
-	// TODO(rjk): Rewrite this in terms of enums.
-            const target = self.opts.target;
-		const goarch = try isa_to_goarch(@tagName(target.result.cpu.arch));
-            try env.put("GOARCH", goarch);
-		const goos = try ostag_to_goos(@tagName(target.result.os.tag));
-            try env.put("GOOS", goos);
+        // GOOS and GOARCH fields are not the same as triple fields on some
+        // platforms. Adjust them appropriately.
+        const target = self.opts.target;
+        const goarch = try isa_to_goarch(@tagName(target.result.cpu.arch));
+        try env.put("GOARCH", goarch);
+        const goos = try ostag_to_goos(@tagName(target.result.os.tag));
+        try env.put("GOOS", goos);
+
+        // Cross compilling Go to MacOS requires providing a sysroot. The default
+        // sysroot exists when the target is macos, a MacOS SDK is installed and
+        // the Zig target is native. Otherwise, a sysroot *might* be present in
+        // some fashion. Add support for specifying the system root.
 
         // CGO
-       if (self.opts.cgo_enabled) {
+        if (self.opts.cgo_enabled) {
             try env.put("CGO_ENABLED", "1");
             // Set zig as the CGO compiler
+            const ts = try self.mktargetstring(b);
             const cc = b.fmt(
-                "zig cc -target {s}-{s}-{s}",
-                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
+                "zig cc -target {s}",
+                .{ts},
             );
             try env.put("CC", cc);
             const cxx = b.fmt(
-                "zig c++ -target {s}-{s}-{s}",
-                .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) },
+                "zig c++ -target {s}",
+                .{ts},
             );
             try env.put("CXX", cxx);
-
-
-            // Tell the linker that we are statically linking.
-		// TODO(rjk): Maybe not right?
-            go_args.appendSlice(&.{ "--ldflags", "-linkmode=external -extldflags=-static" }) catch @panic("OOM");
         } else {
             try env.put("CGO_ENABLED", "0");
         }
-
-
 
         // Output file always needs to be added last
         try go_args.append(self.opts.package_path.getPath(b));
@@ -99,7 +99,7 @@ pub const GoBuildStep = struct {
         const node = mkoptions.progress_node.start(cmd, 1);
         defer node.end();
 
-        // run the command
+        // Run the command
         try self.evalChildProcess(go_args.items, &env);
 
         if (self.generated_bin == null) {
@@ -133,7 +133,7 @@ pub const GoBuildStep = struct {
         return run_step;
     }
 
-    // Add an install step which depends on the GoBuildStep
+    /// Add an install step which depends on the GoBuildStep
     pub fn addInstallStep(self: *GoBuildStep) void {
         const b = self.step.owner;
         const bin_file = self.getEmittedBin();
@@ -161,6 +161,26 @@ pub const GoBuildStep = struct {
 
         try std.Build.Step.handleChildProcessTerm(s, result.term, null, argv);
     }
+
+    /// Create a target that can build the Go code. Uses "native" on MacOS
+    /// so that it has a sysroot.
+    // TODO(rjk): Add some kind f completed sysroot support.
+    fn mktargetstring(self: *GoBuildStep, b: *std.Build) ![]const u8 {
+        const target = self.opts.target;
+        if (target.result.os.tag == .ios or target.result.os.tag == .macos) {
+            return "native";
+        } else {
+            return b.fmt(
+                "{s}-{s}-{s}",
+                .{
+                    @tagName(target.result.cpu.arch),
+                    @tagName(target.result.os.tag),
+                    @tagName(target.result.abi),
+                },
+            );
+        }
+        return error.NOTIMPL_CUSTOM_MACOS_SYSROOT;
+    }
 };
 
 const GoEnvError = error{
@@ -168,33 +188,34 @@ const GoEnvError = error{
     UNSUPPORTED_GOOS,
 };
 
-
+/// Convert a Zig arch triple member to the corresponding GOARCH value.
 fn isa_to_goarch(isa: [:0]const u8) ![:0]const u8 {
     if (std.mem.eql(u8, isa, "x86_64")) {
         return "amd64";
     } else if (std.mem.eql(u8, isa, "arm")) {
-       return "arm";
+        return "arm";
     } else if (std.mem.eql(u8, isa, "aarch64")) {
         return "arm64";
     }
-// TODO(rjk): Consider adding some less popular processors that might
-// work.
+    // TODO(rjk): Consider adding some less popular processors that might
+    // work.
 
-return error.UNSUPPORTED_GOARCH;
+    return error.UNSUPPORTED_GOARCH;
 }
 
-
-
+/// Convert a Zig os triple member to the corresponding GOOS value.
 fn ostag_to_goos(os: [:0]const u8) ![:0]const u8 {
-
-    if (std.mem.startsWith(u8, os, "macos") ) {
+    if (std.mem.startsWith(u8, os, "macos")) {
         return "darwin";
-    } else if (std.mem.startsWith(u8, os, "linux") ) {
+    } else if (std.mem.startsWith(u8, os, "linux")) {
         return "linux";
-    } else if (std.mem.startsWith(u8, os, "windows") ) {
+    } else if (std.mem.startsWith(u8, os, "windows")) {
         return "windows";
-    } 
-// TODO(rjk): Add less common OS. In particular, support Plan9.
+    }
+    // TODO(rjk): Add less common OS. In particular, support Plan9.
     return error.UNSUPPORTED_GOOS;
 }
 
+const MacEnvError = error{
+    NOTIMPL_CUSTOM_MACOS_SYSROOT,
+};

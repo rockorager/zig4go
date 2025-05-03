@@ -1,7 +1,12 @@
 .{
     .name = .go,
     .version = "0.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .go = .{
+            .url = "/Users/rjkroege/tools/_builds/zig4go",
+            .hash = "go-0.0.0-Pc-5hm6ztgQ9f0bk8a1X8qYupArIzWASlP6St1ZBWWnf",
+        },
+    },
     .paths = .{""},
-	.fingerprint = 0xb668935686b9cf3d,
+    .fingerprint = 0xb668935686b9cf3d,
 }
