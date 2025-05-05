@@ -189,7 +189,7 @@ pub const GoBuildStep = struct {
 
     /// Create a target that can build the Go code. Uses "native" on MacOS
     /// so that it has a sysroot.
-    // TODO(rjk): Add some kind f completed sysroot support.
+    // TODO(rjk): Add some kind of completed sysroot support.
     fn mktargetstring(self: *GoBuildStep, b: *std.Build) ![]const u8 {
         const target = self.opts.target;
         if (target.result.os.tag == .ios or target.result.os.tag == .macos) {
