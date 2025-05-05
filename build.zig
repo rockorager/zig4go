@@ -100,6 +100,9 @@ pub const GoBuildStep = struct {
                 .{ts},
             );
             try env.put("CXX", cxx);
+
+            // Tell the linker we are statically linking
+            go_args.appendSlice(&.{ "--ldflags", "-linkmode=external -extldflags=-static" }) catch @panic("OOM");
         } else {
             try env.put("CGO_ENABLED", "0");
         }
