@@ -4,6 +4,15 @@ pub fn addExecutable(b: *std.Build, options: GoBuildStep.Options) *GoBuildStep {
     return GoBuildStep.create(b, options);
 }
 
+/// Convenience method to create a library.
+pub fn addLibrary(b: *std.Build, options: GoBuildStep.Options) *GoBuildStep {
+    var library_options = options;
+    library_options.make_library = true;
+    // A library build requires CGO.
+    library_options.cgo_enabled = true;
+    return GoBuildStep.create(b, library_options);
+}
+
 pub fn build(b: *std.Build) void {
     _ = b;
 }
@@ -15,11 +24,14 @@ pub const GoBuildStep = struct {
     opts: Options,
 
     pub const Options = struct {
+        // The name of generated target.
         name: []const u8,
         target: std.Build.ResolvedTarget,
         optimize: std.builtin.OptimizeMode,
         package_path: std.Build.LazyPath,
+        // Why is this true by default? Should be false by default.
         cgo_enabled: bool = true,
+        make_library: bool = false,
         // TODO(rjk): Add Mac target sysroot support.
     };
 
@@ -92,7 +104,12 @@ pub const GoBuildStep = struct {
             try env.put("CGO_ENABLED", "0");
         }
 
-        // Output file always needs to be added last
+        if (self.opts.make_library) {
+            // Where does the .h file go? (next to it)
+            try go_args.appendSlice(&.{"--buildmode=c-archive"});
+        }
+
+        // Package path always needs to be added last
         try go_args.append(self.opts.package_path.getPath(b));
 
         const cmd = std.mem.join(b.allocator, " ", go_args.items) catch @panic("OOM");
@@ -108,6 +125,11 @@ pub const GoBuildStep = struct {
             self.generated_bin = generated_bin;
         }
         self.generated_bin.?.path = output_file;
+    }
+
+    /// Return the LazyPath of the directory containing the Go-generated include file.
+    pub fn getIncludePath(self: *GoBuildStep) std.Build.LazyPath {
+        return self.getEmittedBin().dirname();
     }
 
     /// Return the LazyPath of the generated binary
