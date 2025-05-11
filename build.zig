@@ -29,7 +29,6 @@ pub const GoBuildStep = struct {
         target: std.Build.ResolvedTarget,
         optimize: std.builtin.OptimizeMode,
         package_path: std.Build.LazyPath,
-        // Why is this true by default? Should be false by default.
         cgo_enabled: bool = true,
         make_library: bool = false,
         // TODO(rjk): Add Mac target sysroot support.
