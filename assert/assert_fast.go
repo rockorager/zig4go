@@ -1,4 +1,4 @@
-//go:build ReleaseFast
+//go:build ReleaseFast || ReleaseSmall
 
 package assert
 

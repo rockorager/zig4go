@@ -38,7 +38,7 @@ pub const BuildStep = struct {
         return self;
     }
 
-    pub fn make(step: *std.Build.Step, progress: std.Progress.Node) !void {
+    pub fn make(step: *std.Build.Step, opts: std.Build.Step.MakeOptions) !void {
         const self: *BuildStep = @fieldParentPtr("step", step);
         const b = step.owner;
         var go_args = std.ArrayList([]const u8).init(b.allocator);
@@ -53,7 +53,7 @@ pub const BuildStep = struct {
         switch (self.opts.optimize) {
             .ReleaseSafe => try go_args.appendSlice(&.{ "-tags", "ReleaseSafe" }),
             .ReleaseFast => try go_args.appendSlice(&.{ "-tags", "ReleaseFast" }),
-            .ReleaseSmall => try go_args.appendSlice(&.{ "-tags", "ReleaseFast" }),
+            .ReleaseSmall => try go_args.appendSlice(&.{ "-tags", "ReleaseSmall" }),
             .Debug => try go_args.appendSlice(&.{ "-tags", "Debug" }),
         }
 
@@ -86,7 +86,7 @@ pub const BuildStep = struct {
         try go_args.append(self.opts.package_path.getPath(b));
 
         const cmd = std.mem.join(b.allocator, " ", go_args.items) catch @panic("OOM");
-        const node = progress.start(cmd, 1);
+        const node = opts.progress_node.start(cmd, 1);
         defer node.end();
 
         // run the command
